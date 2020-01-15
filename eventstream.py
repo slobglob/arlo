@@ -28,7 +28,7 @@ else:
 
 class EventStream(object):
     """This class provides a queue-based EventStream object."""
-    def __init__(self, event_handler, heartbeat_handler, args):
+    def __init__(self, event_handler, heartbeat_handler, sse, id, args):
         self.connected = False
         self.registered = False
         self.queue = queue.Queue()
@@ -36,11 +36,13 @@ class EventStream(object):
         self.event_stream_stop_event = threading.Event()
         self.arlo = args[0]
         self.heartbeat_handler = heartbeat_handler
+        self.id = id
 
         try:
-            event_stream = sseclient.SSEClient('https://my.arlo.com/hmsweb/client/subscribe?token='+self.arlo.request.session.headers.get('Authorization'), session=self.arlo.request.session)
-            self.event_stream_thread = threading.Thread(name="EventStream", target=event_handler, args=(self.arlo, event_stream, self.event_stream_stop_event, ))
+            self.event_stream_thread = threading.Thread(name="EventStream_" + self.id, target=event_handler, args=(self.arlo, sse, self.event_stream_stop_event, ))
             self.event_stream_thread.setDaemon(True)
+            if args[1] == True:
+                self.Connect()
         except Exception as e:
             raise Exception('Failed to subscribe to eventstream: {0}'.format(e))
 
@@ -88,7 +90,7 @@ class EventStream(object):
         self.Unregister()
 
     def Register(self):
-        self.heartbeat_thread = threading.Thread(name='HeartbeatThread', target=self.heartbeat_handler, args=(self.arlo, self.heartbeat_stop_event, ))
+        self.heartbeat_thread = threading.Thread(name='HeartbeatThread_' + self.id, target=self.heartbeat_handler, args=(self.arlo, self.heartbeat_stop_event, ))
         self.heartbeat_thread.setDaemon(True)
         self.heartbeat_thread.start()
         self.registered = True

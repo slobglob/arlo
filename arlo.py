@@ -35,6 +35,8 @@ import requests
 import signal
 import time
 import sys
+from threading import Lock, Thread
+import sseclient
 
 if sys.version[0] == '2':
     import Queue as queue
@@ -56,6 +58,8 @@ class Arlo(object):
         self.event_streams = {}
         self.request = None
 
+        self.sse_lock = Lock()
+        self.sse_connected = False
         self.Login(username, password)
 
     def interrupt_handler(self, signum, frame):
@@ -140,13 +144,16 @@ class Arlo(object):
         }
         self.request.session.headers.update(headers)
 
+        self.sse = sseclient.SSEClient('https://my.arlo.com/hmsweb/client/subscribe?token='+self.request.session.headers.get('Authorization'), session=self.request.session)
         self.user_id = body['userId']
+
         return body
 
     def Logout(self):
         event_streams = self.event_streams.copy()
         for basestation_id in event_streams.keys():
             self.Unsubscribe(basestation_id)
+        self.sse = None
         return self.request.put('https://my.arlo.com/hmsweb/logout')
 
     def Subscribe(self, basestation):
@@ -178,20 +185,33 @@ class Arlo(object):
                 return event
 
         def QueueEvents(self, event_stream, stop_event):
+            self.sse_lock.acquire()
             for event in event_stream:
                 if event is None or stop_event.is_set():
                     return None
 
                 response = json.loads(event.data)
+
+                if 'from' in response:
+                  id = response['from']
+                elif 'deviceId' in response:
+                  id = response['deviceId']
+
                 if basestation_id in self.event_streams:
                     if self.event_streams[basestation_id].connected:
                         if response.get('action') == 'logout':
-                            self.event_streams[basestation_id].Disconnect()
+                            self.sse_connected = False
+                            for stream in self.event_streams:
+                                event_streams[stream].Disconnect()
+
                             return None
                         else:
-                            self.event_streams[basestation_id].queue.put(response)
+                            self.event_streams[id].queue.put(response)
                     elif response.get('status') == 'connected':
-                        self.event_streams[basestation_id].Connect()
+                        self.sse_connected = True
+                        for stream in self.event_streams:
+                            self.event_streams[stream].Connect()
+            self.sse_lock.release()
 
         def Heartbeat(self, stop_event):
             while not stop_event.wait(30.0):
@@ -201,7 +221,7 @@ class Arlo(object):
                     pass
 
         if basestation_id not in self.event_streams or not self.event_streams[basestation_id].connected:
-            self.event_streams[basestation_id] = EventStream(QueueEvents, Heartbeat, args=(self, ))
+            self.event_streams[basestation_id] = EventStream(QueueEvents, Heartbeat, self.sse, basestation_id, args=(self, self.sse_connected))
             self.event_streams[basestation_id].Start()
             while not self.event_streams[basestation_id].connected and not self.event_streams[basestation_id].event_stream_stop_event.is_set():
                 time.sleep(0.5)
