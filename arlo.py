@@ -1451,7 +1451,7 @@ class Arlo(object):
                 fd.write(chunk)
         fd.close()
 
-    def StartStream(self, basestation, camera):
+    def StartStream(self, basestation, camera, timeout=120):
         """
         This function returns the url of the rtsp video stream.
         This stream needs to be called within 30 seconds or else it becomes invalid.
@@ -1471,7 +1471,7 @@ class Arlo(object):
 
             return None
 
-        return self.TriggerAndHandleEvent(basestation, trigger, callback)
+        return self.TriggerAndHandleEvent(basestation, trigger, callback, timeout)
 
     def StopStream(self, basestation, camera):
 
