@@ -15,7 +15,6 @@
 ##
 
 import monotonic
-import sseclient
 import threading
 import sys
 
