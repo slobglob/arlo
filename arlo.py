@@ -200,6 +200,7 @@ class Arlo(object):
                 if basestation_id in self.event_streams:
                     if self.event_streams[basestation_id].connected:
                         if response.get('action') == 'logout':
+                            print('sse disconnected')
                             self.sse_connected = False
                             for stream in self.event_streams:
                                 event_streams[stream].Disconnect()
@@ -208,6 +209,7 @@ class Arlo(object):
                         else:
                             self.event_streams[id].queue.put(response)
                     elif response.get('status') == 'connected':
+                        print('sse connected')
                         self.sse_connected = True
                         for stream in self.event_streams:
                             self.event_streams[stream].Connect()
